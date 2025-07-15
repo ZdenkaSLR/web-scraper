@@ -1,33 +1,30 @@
-name: Daily Scraper with Google Drive Upload
+name: Scrape and Upload Job Offers
 
 on:
+  workflow_dispatch: # Aby šlo workflow spouštět ručně
   schedule:
-    - cron: '0 6 * * *'  # každý den v 6:00 UTC
-  workflow_dispatch:
+    - cron: '0 0 * * *' # Např. každý den o půlnoci UTC
 
 jobs:
-  scrape-upload:
+  scrape-and-upload:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x' # Použij vhodnou verzi Pythonu
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 google-api-python-client google-auth-httplib2 google-auth-oauthlib
 
-    - name: Save Google Credentials
-      env:
-        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-      run: echo "$GOOGLE_CREDENTIALS" > credentials.json
+      - name: Run Python scraper # Tento krok by měl vytvořit Python_nabidky.txt
+        run: python Strankovani_python.py
 
-    - name: Run scraper and upload
-      run: |
-        python Strankovani_python.py
-        python upload_to_drive.py
+      - name: Upload to Google Drive
+        run: python upload_to_drive.py
+        env:
+          GDRIVE_SERVICE_ACCOUNT_CREDENTIALS: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_CREDENTIALS }}
