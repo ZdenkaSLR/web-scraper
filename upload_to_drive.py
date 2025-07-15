@@ -5,7 +5,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
-
 TARGET_FOLDER_ID = '1mo6Qbdp6EU6O4TuuZfdaceuPQiEWbFQm'
 
 def upload_file():
@@ -15,7 +14,6 @@ def upload_file():
 
     creds_info = json.loads(creds_json)
     creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
-
     service = build('drive', 'v3', credentials=creds)
 
     local_file_name = 'Python_nabidky.txt'
@@ -25,7 +23,7 @@ def upload_file():
         print(f"Chyba: Lokální soubor '{local_file_name}' nebyl nalezen. Ujistěte se, že scraping skript jej vytvořil.")
         return
 
-    # Vyhledání existujícího souboru v konkrétní složce
+    # Vyhledání existujícího souboru
     found_file_id = None
     try:
         results = service.files().list(
@@ -44,30 +42,43 @@ def upload_file():
         print(f"Chyba při vyhledávání souboru na Google Drive: {e}")
         found_file_id = None
 
-
-    file_metadata = {
-        'name': drive_file_name,
-        'mimeType': 'text/plain',
-        'parents': [TARGET_FOLDER_ID]
-    }
-    media = MediaFileUpload(local_file_name, mimetype='text/plain', resumable=True)
+    media_body = MediaFileUpload(local_file_name, mimetype='text/plain', resumable=True)
 
     if found_file_id:
-        # Aktualizace existujícího souboru
+        # Soubor nalezen, aktualizujeme ho
         print(f"Nalezen existující soubor na Google Drive (složka '{TARGET_FOLDER_ID}') s ID: {found_file_id}. Bude aktualizován.")
         file = service.files().update(fileId=found_file_id,
-                                      media_body=media,
-                                      supportsAllDrives=True, # TOTO JE KLÍČOVÝ PŘÍDAVEK!
+                                      media_body=media_body,
+                                      supportsAllDrives=True,
                                       fields='id').execute()
         print(f"Soubor '{local_file_name}' byl úspěšně aktualizován na Google Drive (složka '{TARGET_FOLDER_ID}') s ID: {file.get('id')}")
     else:
-        # Vytvoření nového souboru
+        # Soubor nenalezen, pokusíme se ho vytvořit
         print(f"Soubor '{drive_file_name}' v cílové složce nebyl nalezen. Bude vytvořen nový.")
-        file = service.files().create(body=file_metadata,
-                                      media_body=media,
-                                      supportsAllDrives=True, # TOTO JE KLÍČOVÝ PŘÍDAVEK!
-                                      fields='id').execute()
-        print(f"Soubor '{local_file_name}' byl úspěšně nahrán na Google Drive (složka '{TARGET_FOLDER_ID}') s ID: {file.get('id')}")
+        try:
+            file_metadata = {
+                'name': drive_file_name,
+                'mimeType': 'text/plain',
+                'parents': [TARGET_FOLDER_ID]
+            }
+            # Nejdřív vytvoříme prázdný soubor
+            dummy_file = service.files().create(body=file_metadata,
+                                                supportsAllDrives=True, # Důležité
+                                                fields='id').execute()
+            new_file_id = dummy_file.get('id')
+            print(f"Prázdný soubor '{drive_file_name}' vytvořen s ID: {new_file_id}. Nyní nahrávám obsah.")
+
+            # A hned poté ho aktualizujeme skutečným obsahem
+            file = service.files().update(fileId=new_file_id,
+                                          media_body=media_body,
+                                          supportsAllDrives=True, # Důležité
+                                          fields='id').execute()
+            print(f"Soubor '{local_file_name}' byl úspěšně nahrán a aktualizován na Google Drive (složka '{TARGET_FOLDER_ID}') s ID: {file.get('id')}")
+
+        except googleapiclient.errors.HttpError as e:
+            # Zachytíme konkrétní chybu, abychom rozlišili, kde selhala
+            print(f"CHYBA PŘI VYTVAŘENÍ/Nahrávání SOUBORU: {e}")
+            raise # Znovu vyhodíme chybu, aby se workflow zastavilo
 
 if __name__ == '__main__':
     upload_file()
